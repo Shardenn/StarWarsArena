@@ -40,6 +40,9 @@ public:
 
 	virtual void						GetLifetimeReplicatedProps( TArray<FLifetimeProperty>& OutLifetimeProps ) const override;
 
+	UPROPERTY( Replicated )
+	AHuman *							pHuman;
+
 	UFUNCTION( BlueprintCallable, Category = "Saber", Meta = ( DisplayName = "SetSaberState" ) )
 	void								SetSaberState( ESaberState NewState );
 
@@ -51,12 +54,14 @@ public:
 
 	UFUNCTION( BlueprintCallable, Meta = ( DisplayName = "LaunchSaber" ) )
 	void								StopSaber();
-	
-	UFUNCTION( BlueprintCallable, Meta = ( DisplayName = "SetHuman" ) )
-	void								SetHuman( AHuman * NewHuman )						{ m_pHuman = NewHuman; }
-	
+
+	UFUNCTION( Server, Reliable, WithValidation, BlueprintCallable, Meta = ( DisplayName = "SetHuman" ) )
+	void								SetHuman( AHuman * Human );
+	void								SetHuman_Implementation( AHuman * Human )								{ pHuman = Human; }
+	bool								SetHuman_Validate( AHuman * Human ) { return true; }
+
 	UFUNCTION( BlueprintCallable, Meta = ( DisplayName = "GetHuman" ) )
-	AHuman *							GetHuman()											{ return m_pHuman; }	
+	AHuman *							GetHuman()																{ return pHuman; }
 
 protected:
 	virtual void						BeginPlay() override;
@@ -186,8 +191,7 @@ private:
 	* @param bUpdatePosition - if true, Location and Rotation will be updated. Otherwise only scale will be updated.
 	*/
 	void								UpdateTransform( FTransform NewTransfrom, bool bUpdatePosition = false );
-	UPROPERTY( Replicated )
-	AHuman *							m_pHuman;
+	
 	UPROPERTY( Replicated )
 	float								m_Alpha;
 	UPROPERTY( Replicated )

@@ -25,7 +25,7 @@ struct FHumanStats
 
 	FHumanStats()
 	{
-		HS_Health = HS_Stamina = 0;
+		HS_Health = HS_Stamina = -1;
 	}
 
 	FHumanStats( int32 Health, int32 Stamina )
@@ -44,6 +44,13 @@ struct FHumanStats
 		return FHumanStats( FMath::Clamp( HS_Health + other.HS_Health, 0, MaxStats.HS_Health ),
 							FMath::Clamp( HS_Stamina + other.HS_Stamina, 0, MaxStats.HS_Stamina ) );
 	}
+
+	FHumanStats operator = ( FHumanStats other )
+	{
+		HS_Health = other.HS_Health;
+		HS_Stamina = other.HS_Stamina;
+		return *this;
+	}
 };
 
 UENUM( BlueprintType )
@@ -56,10 +63,11 @@ enum class EHumanState : uint8
 	EHS_Acrobatic		UMETA( DisplayName = "Acrobatic" ),// During acrobatic stuff ( running on wall, rolling, etc )
 	EHS_ChangingCombat	UMETA( DisplayName = "ChangingCombat" ), // Drawing/hiding saber
 	EHS_Defending		UMETA( DisplayName = "Defending" ),	// While holding defend button and defending
-	EHS_ThrowingSaber	UMETA( DisplayName = "ThrowingSaber" ) // While throwing saber or waiting until it returns from flight
+	EHS_ThrowingSaber	UMETA( DisplayName = "ThrowingSaber" ), // While throwing saber or waiting until it returns from flight
+	EHS_Dead			UMETA( DisplayName = "Dead" )
 };
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE( FOnPlayerDeath );
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam( FOnPlayerDeath, AHuman*, DiedHuman );
 
 UCLASS()
 class STARWARSARENA_API AHuman : public ACharacter
@@ -237,6 +245,7 @@ private:
 
 	protected:
 	/// Saber variables
+	UPROPERTY( Replicated )
 	ASaber *						m_Saber;
 	UPROPERTY( Replicated )
 	bool							bHoldingAttack = false;
@@ -253,12 +262,7 @@ private:
 	/// Attacks control variables
 	float							m_fFirstPress = 0.f;
 	float							m_fSecondPress = 0.f;
-
-	UFUNCTION( NetMulticast, Reliable, WithValidation )
-	void							Multicast_UpdateStats( FHumanStats DeltaStats );
-	void							Multicast_UpdateStats_Implementation( FHumanStats DeltaStats );
-	bool							Multicast_UpdateStats_Validate( FHumanStats DeltaStats );
-
+	
 	UFUNCTION( Server, Reliable, WithValidation )
 	void							Server_UpdateStats( FHumanStats DeltaStats );
 	void							Server_UpdateStats_Implementation( FHumanStats DeltaStats );

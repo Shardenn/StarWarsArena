@@ -6,3 +6,5 @@ Debug
 Content/StarterContent
 Content/InfinityBladeIceLands
 Content/_Maps
+WindowsNoEditor
+*.7z

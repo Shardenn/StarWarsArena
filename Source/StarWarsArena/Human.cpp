@@ -33,6 +33,7 @@ void AHuman::GetLifetimeReplicatedProps( TArray<FLifetimeProperty> & OutLifetime
 {
 	Super::GetLifetimeReplicatedProps( OutLifetimeProps );
 
+	DOREPLIFETIME( AHuman, m_Saber );
 	DOREPLIFETIME( AHuman, m_eState );
 	DOREPLIFETIME( AHuman, m_CurrentStats );
 	DOREPLIFETIME( AHuman, bHoldingAttack );
@@ -43,7 +44,7 @@ void AHuman::BeginPlay()
 {
 	Super::BeginPlay();
 
-	m_CurrentStats = StartingStats;
+	//m_CurrentStats = StartingStats;
 	UpdateStats( StartingStats );
 
 	SetReplicates( true );
@@ -205,8 +206,21 @@ float AHuman::TakeDamage( float DamageAmount, FDamageEvent const & DamageEvent, 
 	//if( HasAuthority() )
 	//	Multicast_UpdateStats( FHumanStats( -DamageToApply, 0 ) );
 	//else
-		Server_UpdateStats( FHumanStats( -DamageToApply, 0 ) );
 	
+	Server_UpdateStats( FHumanStats( -DamageToApply, 0 ) );
+	
+
+	if( m_eState != EHumanState::EHS_Dead )
+	{
+		if( m_CurrentStats.HS_Health - DamageToApply <= 0 )
+		{
+			if( OnPlayerDeath.IsBound() )
+				OnPlayerDeath.Broadcast( this );
+
+			SetState( EHumanState::EHS_Dead );
+		}
+	}
+
 	return DamageToApply;
 }
 
@@ -549,28 +563,17 @@ void AHuman::Server_UpdateStats_Implementation( FHumanStats DeltaStats )
 	m_CurrentStats = m_CurrentStats.Add( DeltaStats, StartingStats );
 	if( DeltaStats.HS_Stamina > 1 )
 	UE_LOG( LogTemp, Warning, TEXT( "Running updatestats Server. DeltaStamina is %d" ), DeltaStats.HS_Stamina );
-
+	/*
 	if( m_CurrentStats.HS_Health <= 0 )
 	{
 		UE_LOG( LogTemp, Warning, TEXT( "%s died" ), *GetName() );
 		if( OnPlayerDeath.IsBound() )
 			OnPlayerDeath.Broadcast();
 	}
+	*/
 }
 
 bool AHuman::Server_UpdateStats_Validate( FHumanStats DeltaStats )
-{
-	return true;
-}
-
-void AHuman::Multicast_UpdateStats_Implementation( FHumanStats DeltaStats )
-{
-	m_CurrentStats = m_CurrentStats.Add( DeltaStats, StartingStats );
-	if( DeltaStats.HS_Stamina > 1 )
-		UE_LOG( LogTemp, Warning, TEXT( "Running updatestats Multicasted. DeltaStamina is %d" ), DeltaStats.HS_Stamina );
-}
-
-bool AHuman::Multicast_UpdateStats_Validate( FHumanStats DeltaStats )
 {
 	return true;
 }

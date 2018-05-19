@@ -10,7 +10,6 @@
 ASaber::ASaber() :
 	m_Alpha( 0.f ),
 	m_eState( ESaberState::ESS_Closed ),
-	m_pHuman( nullptr ),
 	BladeThickness( 0.05f ),
 	BladeLength( 1.f ),
 	m_fMaxFlyDistance( 0.f ),
@@ -47,7 +46,7 @@ void ASaber::GetLifetimeReplicatedProps( TArray<FLifetimeProperty> & OutLifetime
 {
 	Super::GetLifetimeReplicatedProps( OutLifetimeProps );
 
-	//DOREPLIFETIME( ASaber, m_pHuman );
+	DOREPLIFETIME( ASaber, pHuman );
 	DOREPLIFETIME( ASaber, m_Alpha );
 	DOREPLIFETIME( ASaber, m_eState );
 	DOREPLIFETIME( ASaber, m_fMaxFlyDistance );
@@ -102,15 +101,15 @@ void ASaber::Tick(float DeltaTime)
 		/* Saber throw */
 		case ESaberState::ESS_Flying :
 		{
-			if( !m_pHuman )
+			if( !pHuman )
 			{
 				UE_LOG( LogTemp, Error, TEXT( "%s : saber does not have human attached, but State is Flying." ), *GetName() );
 				return;
 			}
 
-			FVector FlyDirection = m_pHuman->GetControlRotation().Vector();
+			FVector FlyDirection = pHuman->GetControlRotation().Vector();
 
-			if( FVector::Distance( GetActorLocation(), m_pHuman->GetActorLocation() ) < m_fMaxFlyDistance )
+			if( FVector::Distance( GetActorLocation(), pHuman->GetActorLocation() ) < m_fMaxFlyDistance )
 			{
 				FTransform NewTransform( GetActorTransform() );
 				
@@ -137,7 +136,7 @@ void ASaber::Tick(float DeltaTime)
 		/* Saber return */
 		case ESaberState::ESS_Returning :
 		{
-			if( !m_pHuman )
+			if( !pHuman )
 			{
 				UE_LOG( LogTemp, Error, TEXT( "%s : saber does not have human attached, but State is Returning." ), *GetName() );
 				return;
@@ -145,18 +144,18 @@ void ASaber::Tick(float DeltaTime)
 			
 			/* Rotate saber so that handle faces human */
 			FTransform FlyTransform = GetActorTransform();
-			FlyTransform.SetRotation( FQuat( ReturnDeltaRotation + m_pHuman->GetActorForwardVector().Rotation() ) );
+			FlyTransform.SetRotation( FQuat( ReturnDeltaRotation + pHuman->GetActorForwardVector().Rotation() ) );
 			UpdateTransform( FlyTransform, true );
 
 			/* Get hand socket location for saber to fly to */
 			FVector Target;
 			FRotator DiscardRotator;
-			m_pHuman->GetMesh()->GetSocketWorldLocationAndRotation( FName( "SaberHand" ), Target, DiscardRotator ); 
+			pHuman->GetMesh()->GetSocketWorldLocationAndRotation( FName( "SaberHand" ), Target, DiscardRotator ); 
 
 			FVector ReturnDirection = ( Target - GetActorLocation() ).GetSafeNormal();
 
 			/* If saber far enough - update transform so that saber flies to human. */
-			if( FVector::Distance( GetActorLocation() + ReturnDirection * ReturnSpeed, m_pHuman->GetActorLocation() ) > MinDistanceToHuman )
+			if( FVector::Distance( GetActorLocation() + ReturnDirection * ReturnSpeed, pHuman->GetActorLocation() ) > MinDistanceToHuman )
 			{
 				FlyTransform.SetLocation( GetActorLocation() + ReturnDirection * ReturnSpeed );
 				UpdateTransform( FlyTransform, true );
@@ -165,8 +164,8 @@ void ASaber::Tick(float DeltaTime)
 			else
 			{
 				SetSaberState( ESaberState::ESS_Opened );
-				m_pHuman->PutSaberInHand();
-				m_pHuman->SetState( EHumanState::EHS_Free );
+				pHuman->PutSaberInHand();
+				pHuman->SetState( EHumanState::EHS_Free );
 			}
 			
 			break;
@@ -299,12 +298,24 @@ void ASaber::Multicast_BladeOverlap_Implementation( AActor * OverlappedActor )
 {
 	AHuman * OtherHuman = Cast<AHuman>( OverlappedActor );
 
+	if( !OverlappedActor )
+	{
+		UE_LOG( LogTemp, Warning, TEXT( "Saber blade overlapped something, but something is NULL." ), *GetName() );
+		return;
+	}
+
 	UE_LOG( LogTemp, Warning, TEXT( "Saber blade overlapped %s on server." ), *OverlappedActor->GetName() );
 
-	if( !OtherHuman || OtherHuman == m_pHuman )
+	if( !pHuman )
+	{
+		UE_LOG( LogTemp, Error, TEXT( "Saber %s has no human associated." ), *GetName() );
 		return;
+	}
 
-	EHumanState MyHumanState = m_pHuman->GetState();
+	if( !OtherHuman || OtherHuman == pHuman )
+		return;
+	
+	EHumanState MyHumanState = pHuman->GetState();
 	EHumanState OtherHumanState = OtherHuman->GetState();
 
 	if( bApplyDamageWithoutAttack )
@@ -318,16 +329,16 @@ void ASaber::Multicast_BladeOverlap_Implementation( AActor * OverlappedActor )
 	{
 		if( OtherHumanState == EHumanState::EHS_Defending )
 		{
-			m_pHuman->OnAttackDefendingEnemy( OtherHuman );
+			pHuman->OnAttackDefendingEnemy( OtherHuman );
 		}
 		else if( OtherHumanState == EHumanState::EHS_Attacking )
 		{
-			m_pHuman->OnAttackAttackingEnemy( OtherHuman );
+			pHuman->OnAttackAttackingEnemy( OtherHuman );
 		}
 		else
 		{
 			TSubclassOf<UDamageType> DamageType;
-			UGameplayStatics::ApplyDamage( OtherHuman, m_pHuman->GetCurrentlyPlayingAttack().DealtDamage, m_pHuman->GetController(), this, DamageType );
+			UGameplayStatics::ApplyDamage( OtherHuman, pHuman->GetCurrentlyPlayingAttack().DealtDamage, pHuman->GetController(), this, DamageType );
 		}
 	}
 
@@ -346,13 +357,13 @@ void ASaber::LaunchSaber( float MaxDistance )
 
 void ASaber::Server_LaunchSaber_Implementation( float NewMaxFlyDist )
 {
-	if( !m_pHuman || !( m_eState == ESaberState::ESS_Opened || m_eState == ESaberState::ESS_Opening ) )
+	if( !pHuman || !( m_eState == ESaberState::ESS_Opened || m_eState == ESaberState::ESS_Opening ) )
 	{
 		UE_LOG( LogTemp, Error, TEXT( "%s : saber does not have human attached, but LaucnSaber was called." ), *GetName() );
 		
 		return;
 	}
-	FTransform NewTrans( GetActorRotation(), m_pHuman->GetActorLocation() + m_pHuman->GetControlRotation().Vector() * MinDistanceToHuman );
+	FTransform NewTrans( GetActorRotation(), pHuman->GetActorLocation() + pHuman->GetControlRotation().Vector() * MinDistanceToHuman );
 	Multicast_DetachSaber( NewTrans );
 	
 	m_fMaxFlyDistance = NewMaxFlyDist;	
